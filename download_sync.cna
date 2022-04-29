@@ -1,0 +1,333 @@
+#################################
+#   Author: @the_bit_diddler    #
+#################################
+
+sub retrieveCurrentOS {
+    return [ System getProperty: "os.name" ];
+}
+
+
+command getUnix {
+    local('$data');
+
+    $data = retrieveCurrentOS();
+
+    if (lc($data) ismatch 'linux')
+    {
+        println("LINUX");
+    }
+
+    if (lc($data) ismatch 'darwin') 
+    {
+        println("DARWIN");
+    }
+
+    if (lc($data) ismatch 'windows')
+    {
+        println("WINDOWS");
+    }
+}
+
+
+sub downloadAll {
+    import java.util.regex.Matcher;
+    import java.util.regex.Pattern;
+    import java.io.File;
+
+    local('$currentMetaPath');
+    local('$rPath $rName $lPath $rId $rBid');
+
+    $currentMetaPath = script_resource("" . "/");
+    
+    $rPath = $1['path'];
+    $rName = $1['name'];
+    $lPath = $1['lpath'];
+    $rID   = $1['id'];
+    $rBid  = $1['bid'];  
+
+    # Match a typical filesytem path, not UNC
+    if ($rPath ismatch '^[A-Za-z]:.*$')
+    {
+        local('$currentBase');
+        local('$pattern $matcher');
+
+        $pattern = [ Pattern compile: "[A-Za-z](?=:)" ];
+        $matcher = [ $pattern matcher: $rPath ];
+
+        if ( [ $matcher find ] )
+        {
+            local('$currentFullLocalPath');
+
+            $currentFullLocalPath =  binfo($rBid, "computer") . "_" . replace(binfo($rBid, "internal"), '\.', '_');
+            $currentFullLocalPath .= "/" . [ $matcher group: 0 ];
+            $currentFullLocalPath .= replace($rPath, [ $matcher group: 0 ] . ':', '');
+            $currentFullLocalPath =  replace($currentFullLocalPath, '\\\\', '/') . $rName;
+
+            # Create variable for Java object
+            local('$path');
+            $path = [ new File: $currentFullLocalPath ];
+
+            if ( !-isDir ($currentMetaPath . [ $path getParent]) )
+            {
+                println("Making directory: " . ($currentMetaPath . [ $path getParent ]));
+                mkdir($currentMetaPath . [ $path getParent ]);
+            }
+            
+            if (size(@_) == 2)
+            {
+                if ($2 ismatch 'OVERWRITE')
+                {
+                    if (-isFile ($currentMetaPath . [ $path getParent ] . "/" . $rName))
+                    {
+                        sync_download($lPath, ($currentMetaPath . [ $path getParent ] . "/" . $rName), lambda({
+                            println("Downloaded and overwrote: $1 [ $+ $rName $+ ]");
+                            }, \$rName));
+                    }
+                    else
+                    {
+                        sync_download($lPath, ($currentMetaPath . [ $path getParent ] . "/" . $rName), lambda({
+                            println("Downloaded: $1 [ $+ $rName $+ ]");
+                            }, \$rName));
+                    }
+                }
+            }
+            else if ( !-isFile ($currentMetaPath . [ $path getParent ] . "/" . $rName) )
+            {
+                sync_download($lPath, ($currentMetaPath . [ $path getParent ] . "/" . $rName), lambda({
+                    println("Downloaded: $1 [ $+ $rName $+ ]");
+                }, \$rName));
+            }
+        }
+
+    }
+    else
+    {
+        if ($rPath ismatch '^\\\\.*$')
+        {
+            $rPath = replace($rPath, '\\\\\\\\', '');
+            $rPath = replace($rPath, '\\\\', '/');
+            
+            local('$currentFullLocalPath');
+
+            $currentFullLocalPath = $rPath . $rName;
+
+            # Create variable for Java object
+            local('$path');
+            $path = [ new File: $currentFullLocalPath ];
+
+            if ( !-isDir ($currentMetaPath . [ $path getParent]) )
+            {
+                mkdir($currentMetaPath . [ $path getParent ]);
+            }
+
+            if (size(@_) == 2)
+            {
+                if ($2 ismatch 'OVERWRITE')
+                {
+                    if (-isFile ($currentMetaPath . [ $path getParent ] . "/" . $rName))
+                    {
+                        sync_download($lPath, ($currentMetaPath . [ $path getParent ] . "/" . $rName), lambda({
+                            println("Downloaded and overwrote: $1 [ $+ $rName $+ ]");
+                            }, \$rName));
+                    }
+                    else
+                    {
+                        sync_download($lPath, ($currentMetaPath . [ $path getParent ] . "/" . $rName), lambda({
+                            println("Downloaded: $1 [ $+ $rName $+ ]");
+                        }, \$rName));
+                    }
+                }
+            }
+            else if ( !-isFile ($currentMetaPath . [ $path getParent ] . "/" . $rName) )
+            {
+                sync_download($lPath, ($currentMetaPath . [ $path getParent ] . "/" . $rName), lambda({
+                    println("Downloaded: $1 [ $+ $rName $+ ]");
+                }, \$rName));
+            }
+        }
+    }
+}
+
+
+alias sync_beacon_downloads {
+    local('$download');
+    local('@currentReturnString');
+    local('@currentQueue');
+
+    foreach $download (downloads())
+    {
+        if ($download['bid'] ismatch $1)
+        {
+            if (size(@_) >= 2)
+            {
+                if (('.*' . lc($download['path'] . $download['name'])) ismatch ('.*' . lc($2) . '.*$'))
+                {
+                    @currentReturnString = add(@currentReturnString, ($download['path'] . $download['name']));
+                    @currentQueue = add(@currentQueue, $download);
+                }
+            }
+            else
+            {
+                @currentReturnString = add(@currentReturnString, ($download['path'] . $download['name']));
+                @currentQueue = add(@currentQueue, $download);
+            }
+        }
+    }
+
+    if (size(@currentReturnString) >= 1)
+    {
+        local('$downloadQueue');
+
+        blog($1, "Current Downloads in Queue:\n\t" . join("\n\t", sorta(@currentReturnString)));
+
+        foreach $downloadQueue (@currentQueue)
+        {
+            if (size(@_) == 3)
+            {
+                if ($3 ismatch 'OVERWRITE')
+                {
+                    downloadAll($downloadQueue, 'OVERWRITE');
+                }
+                else
+                {
+                    downloadAll($downloadQueue);
+                }
+            }
+            downloadAll($downloadQueue);
+        }
+
+        show_message("Downloads and directories for beacon synced.");
+    }
+    else
+    {
+        berror($1, "No downloads matching criteria found.");
+    }
+}
+
+
+alias show_beacon_downloads {
+    local('$download');
+    local('@currentReturnString');
+
+    foreach $download (downloads())
+    {
+        if ($download['bid'] ismatch $1)
+        {
+            if (size(@_) == 2)
+            {
+                if ((lc($download['path'] . $download['name'])) ismatch ('.*' . lc($2) . '.*$'))
+                {
+                    @currentReturnString = add(@currentReturnString, ($download['path'] . $download['name']));
+                }
+            }
+            else
+            {
+                @currentReturnString = add(@currentReturnString, ($download['path'] . $download['name']));
+            }
+        }
+    }
+
+    if (size(@currentReturnString) >= 1)
+    {
+        blog($1, "Current Downloads Matching Criteria in Current Beacon:\n\t" . join("\n\t", sorta(@currentReturnString)));
+    }
+    else
+    {
+        berror($1, "No downloads matching criteria found.");
+    }
+}
+
+
+alias sync_all_beacon_downloads {
+    local('$download');
+    local('@currentReturnString');
+    local('@currentQueue');
+
+    foreach $download (downloads())
+    {
+        if (size(@_) >= 2)
+        {
+            if (('.*' . lc($download['path'] . $download['name'])) ismatch ('.*' . lc($2) . '.*$'))
+            {
+                @currentReturnString = add(@currentReturnString, ($download['path'] . $download['name']));
+                @currentQueue = add(@currentQueue, $download);
+            }
+        }
+        else
+        {
+            @currentReturnString = add(@currentReturnString, ($download['path'] . $download['name']));
+            @currentQueue = add(@currentQueue, $download);
+        }
+    }
+
+    if (size(@currentReturnString) >= 1)
+    {
+        local('$downloadQueue');
+
+        blog($1, "Current Downloads in Queue:\n\t" . join("\n\t", sorta(@currentReturnString)));
+
+        foreach $downloadQueue (@currentQueue)
+        {
+            if (size(@_) == 3)
+            {
+                if ($3 ismatch 'OVERWRITE')
+                {
+                    downloadAll($downloadQueue, 'OVERWRITE');
+                }
+                else
+                {
+                    downloadAll($downloadQueue);
+                }
+            }
+
+            downloadAll($downloadQueue);
+        }
+
+        show_message("Downloads and directories for beacon synced.");
+    }
+    else
+    {
+        berror($1, "No downloads matching criteria found.");
+    }
+}
+
+
+alias search_all_beacon_downloads {
+    local('$download');
+    local('$currentRPath');
+    local('@currentReturnString');
+
+    foreach $download (downloads())
+    {
+        if (size(@_) == 2)
+        {
+            if ((lc($download['path'] . $download['name'])) ismatch ('.*' . lc($2) . '.*$'))
+            {
+                @currentReturnString = add(@currentReturnString, (binfo(($download['bid']), "internal") . "@" . binfo($download['bid'], "pid") . "\t->\t" . $download['path'] . $download['name']));
+            }
+        }
+        else
+        {
+            @currentReturnString = add(@currentReturnString, (binfo(($download['bid']), "internal") . "@" . binfo(($download['bid']), "pid") . "\t->\t" . $download['path'] . $download['name']));
+        }
+    }
+
+    if (size(@currentReturnString) >= 1)
+    {
+        blog($1, "Current Downloads Matching Criteria:\n\t" . join("\n\t", sorta(@currentReturnString)));
+    }
+    else
+    {
+        berror($1, "No downloads matching criteria found.");
+    }
+}
+
+
+# Command registratrations with aliases
+beacon_command_register("show_beacon_downloads", "Show all Downloads associated with your current Beacon.", "Usage: show_beacon_downloads [optional string to match]");
+
+beacon_command_register("sync_beacon_downloads", "Sync all Downloads from current Beacon.", "Usage: sync_beacon_downloads [optional string to match]");
+
+beacon_command_register("sync_all_beacon_downloads", "Sync all Downloads.", "Usage: sync_all_beacon_downloads [optional string to match]");
+
+beacon_command_register("search_all_beacon_downloads", "Show all Downloads", "Usage: search_all_beacon_downloads [optional string to match]");
