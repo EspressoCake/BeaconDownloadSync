@@ -1,32 +1,4 @@
-#################################
-#   Author: @the_bit_diddler    #
-#################################
-
-sub retrieveCurrentOS {
-    return [ System getProperty: "os.name" ];
-}
-
-
-command getUnix {
-    local('$data');
-
-    $data = retrieveCurrentOS();
-
-    if (lc($data) ismatch 'linux')
-    {
-        println("LINUX");
-    }
-
-    if (lc($data) ismatch 'darwin') 
-    {
-        println("DARWIN");
-    }
-
-    if (lc($data) ismatch 'windows')
-    {
-        println("WINDOWS");
-    }
-}
+global('%downloadSyncLocation');
 
 
 sub downloadAll {
@@ -37,7 +9,7 @@ sub downloadAll {
     local('$currentMetaPath');
     local('$rPath $rName $lPath $rId $rBid');
 
-    $currentMetaPath = script_resource("" . "/");
+    $currentMetaPath = %downloadSyncLocation[data_query('localip')] . "/";
     
     $rPath = $1['path'];
     $rName = $1['name'];
@@ -154,6 +126,12 @@ alias sync_beacon_downloads {
     local('@currentReturnString');
     local('@currentQueue');
 
+	if (data_query('localip') !in (keys(%downloadSyncLocation)))
+	{
+		berror($1, "No download location set, you must run set_sync_location first!");
+		return;
+	}
+
     foreach $download (downloads())
     {
         if ($download['bid'] ismatch $1)
@@ -243,6 +221,12 @@ alias sync_all_beacon_downloads {
     local('@currentReturnString');
     local('@currentQueue');
 
+	if (data_query('localip') !in (keys(%downloadSyncLocation)))
+	{
+		berror($1, "No download location set, you must run set_sync_location first!");
+		return;
+	}
+
     foreach $download (downloads())
     {
         if (size(@_) >= 2)
@@ -323,11 +307,48 @@ alias search_all_beacon_downloads {
 }
 
 
-# Command registratrations with aliases
+alias set_sync_location {
+	local('$syncRootPath');
+
+	if (size(@_) != 2)
+	{
+		berror($1, "You must specify a local path to download a path tree to.");
+		return;
+	}
+
+	if (!-isDir $2)
+	{
+		berror($1, "The path you specified does not exist on the system. You must create it first.");
+		return;
+	}
+
+	%downloadSyncLocation[data_query('localip')] = $2;
+	blog($1, "Set download location root for TeamServer: " . %downloadSyncLocation[data_query('localip')]);
+}
+
+
+alias show_sync_location {
+	if (data_query('localip') !in (keys(%downloadSyncLocation)))
+	{
+		berror($1, "No download location set for this TeamServer.");
+		return;
+	}
+	else
+	{
+		blog($1, "Download location for TeamServer: " . %downloadSyncLocation[data_query('localip')]);
+	}
+}
+
+
+# Registration of alisases for usage within Beacons
+beacon_command_register("show_sync_location", "Shows sync location for downloads.", "Usage: show_sync_location");
+
+beacon_command_register("set_sync_location", "Set the root path for synced downloads", "Usage: set_sync_location path_to_base_directory");
+
 beacon_command_register("show_beacon_downloads", "Show all Downloads associated with your current Beacon.", "Usage: show_beacon_downloads [optional string to match]");
 
-beacon_command_register("sync_beacon_downloads", "Sync all Downloads from current Beacon.", "Usage: sync_beacon_downloads [optional string to match]");
+beacon_command_register("sync_beacon_downloads", "Sync all Downloads from current Beacon.", "Usage: sync_beacon_downloads [optional string to match] [OVERWRITE]");
 
-beacon_command_register("sync_all_beacon_downloads", "Sync all Downloads.", "Usage: sync_all_beacon_downloads [optional string to match]");
+beacon_command_register("sync_all_beacon_downloads", "Sync all Downloads.", "Usage: sync_all_beacon_downloads [optional string to match] [OVERWRITE]");
 
 beacon_command_register("search_all_beacon_downloads", "Show all Downloads", "Usage: search_all_beacon_downloads [optional string to match]");

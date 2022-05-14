@@ -7,6 +7,16 @@ This is meant as a fine-tuned control mechanism for syncing files from the `Coba
 2. Context maintenance
     - Whether from a `UNC` path or a "local" system filepath, your *full* directory path will be maintained
 
+## Prerequisities
+1. You *must* run the `set_sync_location` command with an arugment of where you would like the *base* of the directory structure to be written
+    - There is a sanity check that will determine if the provided location is valid
+        - If this returns false, you will be warned and the path will *not* be saved for future use
+    - There is a courtesy function, `show_sync_location` that you can use to determine the current (or prior) path you had set the download location to 
+
+## Other Features
+1. This script, as it is client-side, means every connection to your `TeamServer` is unique, meaning `set_sync_location` is on a per-`TeamServer` basis
+    - Stop fighting managing your donwloads, and keep yourself from unintentionally crossing streams!
+ 
 ## Usage
 | Beacon_Command                | Description                   | Example Usage                                                             |
 | ----------------------------- | ----------------------------- | ------------------------------------------------------------------------- |
